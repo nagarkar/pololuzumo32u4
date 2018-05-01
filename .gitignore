@@ -1,6 +1,7 @@
 # Generated files
 bin/
 lib/
+*.bak
 
 # Windows image file caches
 Thumbs.db
