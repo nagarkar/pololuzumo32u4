@@ -1,4 +1,4 @@
-This is the Blinky example for the Pololu Zumo 32U4, which blinks the on-board Red LED once per second.
+<b>This is the Blinky example for the Pololu Zumo 32U4, which blinks the on-board Red LED once per second.
 
 Prerequisites:
 - Install the QPN and Pololu zomo 32u4 libraries in Arduino
@@ -10,13 +10,13 @@ The example uses the QP framework, which requires a tick timer to drive scheduli
 
 It also displays the number of milliseconds elapsed since the last time the LED was switched, using the LCD display. This number should be about 1000 ms = 1 sec.
 
-The example demonstrates:
+<b>The example demonstrates:
 
 1. One active object class "Sumo" (inside the package "AOs")
 2. A simple state machine
 
 
-Useful documentation
+<b>Useful documentation
 1. Shortform description of Timer 4 (https://goo.gl/9tUArV)
 2. 32U4 processor datasheet: (https://goo.gl/4L7tAf)
 3. Zumo 32u4 arduino library (https://www.pololu.com/docs/0J63/6)
