@@ -1,10 +1,22 @@
 Examples for Pololu Zumo 32u4 robot running QP state machines.
 
-You'll need a robot to run these, of course.
+Prerequisites:
+- The Pololu Zumo 32u4 robot to run these examples.
+- Install the QM modeler
+- Arduino IDE
+- Install the QPN and Pololu zomo 32u4 libraries in Arduino
+- There are two good ways to do development on this:
+-- Use Arduino IDE to compile and upload; Setup Arduino IDE with 'external editor' preference so you can use QM modeler for editing. Switch between them (QM for code, Arduino for compile/upload).
+-- Use QM for everything, using external tools preferences as defined in the .Blinky file in the source directory.
 
-In addition, you'll need to install the QM modeler, and other prereqs (see Blinky Readme.md)
+Useful documentation:
+1. Shortform description of Timer 4 (https://goo.gl/9tUArV)
+2. 32U4 processor datasheet: (https://goo.gl/4L7tAf)
+3. Zumo 32u4 arduino library (https://www.pololu.com/docs/0J63/6)
+4. Using QM Modeler for Atmega328/Uno (https://goo.gl/VZYq4W)
 
-General Troubleshooting tips
+
+General Troubleshooting tips:
 
 Q. What to do when Arduino can't upload
 A. What works for me is to press the reset button on the pololu two times quickly when the 'Upload' attempt is being made. 
