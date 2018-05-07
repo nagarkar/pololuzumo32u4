@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model version="4.1.2" links="0">
+ <documentation>See Readme.md</documentation>
+ <framework name="qpn"/>
+ <package name="AOs" stereotype="0x02">
+  <class name="Sumo" superclass="qpn::QActive">
+   <attribute name="ready_time_remaining = 0" type="uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="turn_speed = 200" type="const uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="ready_timeout_ms = 2000" type="const uint16_t" visibility="0x00" properties="0x00"/>
+   <statechart>
+    <initial target="../1">
+     <initial_glyph conn="3,4,5,0,13,2">
+      <action box="0,-2,10,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="paused">
+     <entry brief="updateui">ledRed(HIGH);
+
+lcd.clear();
+lcd.print(F(&quot;Press A&quot;));</entry>
+     <tran trig="BUTTON_PRESS" target="../../2">
+      <action>ledRed(LOW);
+me-&gt;ready_time_remaining = me-&gt;ready_timeout_ms;
+QActive_armX((QActive *)me, 0 /*Tick rate */, 10 /* millis */, 10);</action>
+      <tran_glyph conn="11,14,3,3,-7,40,8">
+       <action box="-6,11,16,3"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="11,6,22,11">
+      <entry box="1,2,17,4"/>
+     </state_glyph>
+    </state>
+    <state name="ready">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action>me-&gt;ready_time_remaining -= 10; // reduce by 10 millis.
+float timeToPrint = ((float)me-&gt;ready_time_remaining)/1000;
+lcd.clear();
+lcd.print(timeToPrint, 2);
+if(me-&gt;ready_time_remaining &lt;= 0){
+    QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+    QACTIVE_POST((QActive *)me, READY_TIMEOUT_SIG, 0);
+}</action>
+      <tran_glyph conn="34,52,1,2,26,7,-31,-2">
+       <action box="4,4,10,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="READY_TIMEOUT" target="../../3">
+      <tran_glyph conn="34,50,1,2,44,-6">
+       <action box="6,-4,19,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="12,47,22,10"/>
+    </state>
+    <state name="fighting">
+     <entry brief="updateui">lcd.clear();
+lcd.print(F(&quot;Scanning&quot;));</entry>
+     <exit brief="stopmotors">motors.setSpeeds(0, 0);</exit>
+     <initial target="../3">
+      <initial_glyph conn="43,11,5,0,5,5">
+       <action box="0,-2,10,2"/>
+      </initial_glyph>
+     </initial>
+     <tran trig="BUTTON_PRESS" target="../../1">
+      <tran_glyph conn="40,3,3,0,-10,3">
+       <action box="-18,-2,17,2"/>
+      </tran_glyph>
+     </tran>
+     <state name="scan_right">
+      <entry brief="turn">motors.setSpeeds(me-&gt;turn_speed, -me-&gt;turn_speed);
+lcd.clear();
+lcd.print(&quot;Right&quot;);</entry>
+      <tran trig="OPPONENT_ON_LEFT" target="../../3">
+       <tran_glyph conn="89,14,2,1,6,-35">
+        <action box="-31,7,19,2"/>
+       </tran_glyph>
+      </tran>
+      <tran trig="OPPONENT_IN_FRONT" target="../../4">
+       <tran_glyph conn="95,11,1,1,8,29,-23">
+        <action box="-11,30,20,2"/>
+       </tran_glyph>
+      </tran>
+      <state_glyph node="84,8,11,6">
+       <entry box="1,2,6,2"/>
+      </state_glyph>
+     </state>
+     <state name="scan_left">
+      <entry brief="turn">motors.setSpeeds(-me-&gt;turn_speed, me-&gt;turn_speed);
+lcd.clear();
+lcd.print(&quot;Left&quot;);</entry>
+      <tran trig="OPPONENT_ON_RIGHT" target="../../2">
+       <tran_glyph conn="52,16,0,3,-7,32">
+        <action box="2,-5,17,2"/>
+       </tran_glyph>
+      </tran>
+      <tran trig="OPPONENT_IN_FRONT" target="../../4">
+       <tran_glyph conn="44,22,2,3,18,23">
+        <action box="2,15,22,2"/>
+       </tran_glyph>
+      </tran>
+      <state_glyph node="42,16,12,6">
+       <entry box="1,2,6,2"/>
+      </state_glyph>
+     </state>
+     <state name="ram">
+      <entry>uint8_t confidence = Q_PAR(me);
+int speed = (2 * ((float)confidence)/100) * me-&gt;turn_speed;
+motors.setSpeeds(speed, speed);
+lcd.clear();
+lcd.print(&quot;S:&quot;);lcd.print(speed);</entry>
+      <tran trig="OPPONENT_ON_LEFT" target="../../3">
+       <tran_glyph conn="70,36,0,2,-6,-20,-8">
+        <action box="-18,-9,17,2"/>
+       </tran_glyph>
+      </tran>
+      <tran trig="OPPONENT_ON_RIGHT" target="../../2">
+       <tran_glyph conn="80,38,1,2,14,-24">
+        <action box="-5,-12,19,2"/>
+       </tran_glyph>
+      </tran>
+      <state_glyph node="67,36,13,6">
+       <entry box="1,2,7,2"/>
+      </state_glyph>
+     </state>
+     <state_glyph node="40,1,65,43">
+      <entry box="1,2,15,2"/>
+      <exit box="1,4,15,2"/>
+     </state_glyph>
+    </state>
+    <state_diagram size="176,70"/>
+   </statechart>
+  </class>
+  <class name="ButtonEvtSimulator" superclass="qpn::QActive">
+   <attribute name="period = 100" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <statechart>
+    <initial target="../1">
+     <action>QActive_armX(&amp;me-&gt;super, 0 /*Tick rate */, me-&gt;period /* millis */, me-&gt;period);</action>
+     <initial_glyph conn="21,12,5,0,5,4">
+      <action box="0,-2,10,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="running">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action>//lcd.clear();
+//lcd.print(F(&quot;Timer&quot;));
+
+if (buttonA.getSingleDebouncedPress()) {
+    QACTIVE_POST((QActive *)&amp;AO_Sumo, BUTTON_PRESS_SIG, 0);
+}</action>
+      <tran_glyph conn="51,18,1,1,11,12,-11">
+       <action box="0,-2,10,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="20,16,31,17"/>
+    </state>
+    <state_diagram size="80,50"/>
+   </statechart>
+  </class>
+  <class name="ProximityEvtSimulator" superclass="qpn::QActive">
+   <attribute name="period = 200" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <operation name="getConfidence" type="uint8_t" visibility="0x00" properties="0x01">
+    <parameter name="highValue" type="uint8_t"/>
+    <parameter name="lowValue" type="uint8_t"/>
+    <code>float diff = (float)(highValue - lowValue);
+return 100 * diff/proxSensors.getNumBrightnessLevels();</code>
+   </operation>
+   <statechart>
+    <initial target="../1">
+     <action brief="armTimeout, init sensor">proxSensors.initThreeSensors();
+QActive_armX(&amp;me-&gt;super, 0 /*Tick rate */, me-&gt;period /* millis */, me-&gt;period);</action>
+     <initial_glyph conn="28,10,5,0,5,5">
+      <action box="0,-2,10,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="running">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action>proxSensors.read();
+uint8_t leftCount = proxSensors.countsFrontWithLeftLeds();
+uint8_t rightCount = proxSensors.countsFrontWithRightLeds();
+//lcd.clear();
+//lcd.print(&quot;LPC:&quot;);
+//lcd.print(leftCount);
+//lcd.gotoXY(0, 1);
+//lcd.print(&quot;RPC:&quot;);
+//lcd.print(rightCount);
+if(leftCount &gt; rightCount) {
+  uint8_t confidence = ProximityEvtSimulator_getConfidence(leftCount, rightCount);
+  QACTIVE_POST((QActive *)&amp;AO_Sumo, OPPONENT_ON_LEFT_SIG, confidence);
+  //lcd.clear();
+  //lcd.print(&quot;GoLft&quot;);
+} else if (rightCount &gt; leftCount) {
+  uint8_t confidence = ProximityEvtSimulator_getConfidence(rightCount, leftCount);
+  QACTIVE_POST((QActive *)&amp;AO_Sumo, OPPONENT_ON_RIGHT_SIG, confidence);
+  //lcd.clear();
+  //lcd.print(&quot;GoRgt&quot;);
+}
+else {
+  uint8_t confidence = ProximityEvtSimulator_getConfidence(rightCount, 0);
+  QACTIVE_POST((QActive *)&amp;AO_Sumo, OPPONENT_IN_FRONT_SIG, confidence);
+}</action>
+      <tran_glyph conn="50,19,1,1,14,6,-14">
+       <action box="0,-2,10,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="30,15,20,12"/>
+    </state>
+    <state_diagram size="80,50"/>
+   </statechart>
+  </class>
+ </package>
+ <directory name=".">
+  <file name="Fighting.ino">
+   <text>#define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
+
+#include &quot;qpn.h&quot;     // QP-nano framework
+#include &quot;Arduino.h&quot; // Arduino API
+
+#include &quot;Zumo32U4.h&quot;
+
+//============================================================================
+// declare all AO classes...
+$declare(AOs::Sumo)
+$declare(AOs::ButtonEvtSimulator)
+$declare(AOs::ProximityEvtSimulator)
+//...
+
+// AO instances and event queue buffers for them...
+Sumo AO_Sumo;
+ButtonEvtSimulator AO_ButtonSim;
+ProximityEvtSimulator AO_ProximitySim;
+
+
+// Other objects
+Zumo32U4LCD lcd;
+Zumo32U4ButtonA buttonA;
+Zumo32U4Motors motors;
+Zumo32U4LineSensors lineSensors;
+Zumo32U4ProximitySensors proxSensors;
+
+
+static QEvt l_SumoQSto[10]; // Event queue storage for Blinky
+static QEvt l_ButtonSimQSto[10];
+static QEvt l_ProxSimQSto[10];
+//...
+
+//============================================================================
+// QF_active[] array defines all active object control blocks ----------------
+QActiveCB const Q_ROM QF_active[] = {
+    { (QActive *)0,               (QEvt *)0,           0U                        },
+    { (QActive *)&amp;AO_Sumo,        l_SumoQSto,          Q_DIM(l_SumoQSto)         },
+    { (QActive *)&amp;AO_ButtonSim,   l_ButtonSimQSto,     Q_DIM(l_ButtonSimQSto)    },
+    { (QActive *)&amp;AO_ProximitySim,l_ProxSimQSto,       Q_DIM(l_ProxSimQSto)      }
+};
+
+//============================================================================
+// various constants for the application...
+enum {
+    BSP_TICKS_PER_SEC = 1000, // number of system clock ticks in one second
+};
+
+enum Signals {
+ BUTTON_PRESS_SIG = Q_USER_SIG,
+ READY_TIMEOUT_SIG,
+ OPPONENT_ON_RIGHT_SIG,
+ OPPONENT_ON_LEFT_SIG,
+ OPPONENT_IN_FRONT_SIG,
+ MAXSIGS
+};
+
+
+
+//............................................................................
+void setup() {
+    // initialize the QF-nano framework
+    QF_init(Q_DIM(QF_active));
+
+    // initialize all AOs...
+    QActive_ctor(&amp;AO_Sumo.super, Q_STATE_CAST(&amp;Sumo_initial));
+
+    QActive_ctor(&amp;AO_ButtonSim.super, Q_STATE_CAST(&amp;ButtonEvtSimulator_initial));
+
+    QActive_ctor(&amp;AO_ProximitySim.super, Q_STATE_CAST(&amp;ProximityEvtSimulator_initial));
+}
+
+//............................................................................
+void loop() {
+    QF_run(); // run the QF-nano framework
+}
+
+//============================================================================
+// interrupts...
+ISR(TIMER4_COMPA_vect) {
+    QF_tickXISR(0); // process time events for tick rate 0
+}
+
+//============================================================================
+// QF callbacks...
+void QF_onStartup(void) {
+
+    /**
+        1. Generally, ignoring TC4H when writing TCNT, OCR and other registers
+           (i.e. we assume it is zero) in each case as we expect the count to fit in 8 bits.
+        2. General idea is to use OCR4A to generate an interrupt. We could also use the overflow interrupt, but a
+           handler for that is defined in the pololu library code, so compilation will fail or we will need to 
+           remove the handler from the pololu code.
+        3. See below for specifics about interaction between OCR4A and OCR4C.
+    */
+
+    // TCCR4A is used to generate output pin signals (along with interrupt), but we don't want to generate output.
+    TCCR4A = 0;
+    // Prescale by 1/128
+    TCCR4B = (0&lt;&lt;PWM4X) | (0&lt;&lt;PSR4) | (0&lt;&lt;DTPS41) | (0&lt;&lt;DTPS40) | (1&lt;&lt;CS43) | (0&lt;&lt;CS42) | (0&lt;&lt;CS41) | (0&lt;&lt;CS40);
+
+    // For some reason, not setting TCCR4D to zero explicitly results in doubling the time interval. All initial
+    // values of TCCR4D are zero according to the datasheet. Since I was unable to explain this, I have expliclty
+    // set all control registers to zero instead of assuming they are zero.
+    TCCR4C = 0;
+    TCCR4D = 0;
+    TCCR4E = 0;
+
+    TCNT4=0x00;
+
+    /* Calculate Timer Count Max.
+        1. We don't explicilty set OCR4B/D as it is not used. Setting it has no effect (verified).
+        2. We set OCR4C to the same value as OCR4A. OCR4A generates an interrupt on compare match.
+           OCR4C contains the 'TOP' value,  i.e. the value to which the timer is reset.
+        2.1 Note: Not setting OCR4C causes the uP to double the count. No idea why. (verified)
+        2.2 Note: Setting OCR4C to zero or Setting it to a value other than OCR4A, results in no OCR4A interrupt being generated. (verified)
+    */
+    OCR4A  = (F_CPU / BSP_TICKS_PER_SEC / 128U) - 1;
+    OCR4C =(F_CPU / BSP_TICKS_PER_SEC / 128U) - 1U;
+
+    // Enable TIMER compare Interrupt for OCR4A
+    TIMSK4= (1&lt;&lt;OCIE4A);
+}
+//............................................................................
+void QV_onIdle(void) {   // called with interrupts DISABLED
+    // Put the CPU and peripherals to the low-power mode. You might
+    // need to customize the clock management for your application,
+    // see the datasheet for your particular AVR MCU.
+    SMCR = (0 &lt;&lt; SM0) | (1 &lt;&lt; SE); // idle mode, adjust to your project
+    QV_CPU_SLEEP();  // atomically go to sleep and enable interrupts
+}
+//............................................................................
+void Q_onAssert(char const Q_ROM * const file, int line) {
+    // implement the error-handling policy for your application!!!
+    QF_INT_DISABLE(); // disable all interrupts
+    QF_RESET();  // reset the CPU
+}
+
+//============================================================================
+// define all AO classes (state machine)...
+$define(AOs::Sumo)
+$define(AOs::ButtonEvtSimulator)
+$define(AOs::ProximityEvtSimulator)
+//...
+</text>
+  </file>
+ </directory>
+</model>

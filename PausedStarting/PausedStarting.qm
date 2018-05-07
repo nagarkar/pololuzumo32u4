@@ -4,56 +4,88 @@
  <framework name="qpn"/>
  <package name="AOs" stereotype="0x02">
   <class name="Sumo" superclass="qpn::QActive">
-   <attribute name="millis" type="unsigned long" visibility="0x00" properties="0x00"/>
-   <operation name="printElapsedTime" type="void" visibility="0x00" properties="0x00">
-    <code>unsigned long ctime = millis();
-unsigned long diff = ctime - me-&gt;millis;
-me-&gt;millis = ctime;
-lcd.clear();
-lcd.print(diff);</code>
-   </operation>
+   <attribute name="ready_time_remaining = 0" type="uint16_t" visibility="0x00" properties="0x00"/>
    <statechart>
     <initial target="../1">
-     <action>me-&gt;millis = millis();
-QActive_armX((QActive *)me, 0U,
-    BSP_TICKS_PER_SEC, BSP_TICKS_PER_SEC);</action>
-     <initial_glyph conn="2,3,5,1,24,4,-2">
-      <action box="0,-2,6,2"/>
+     <initial_glyph conn="20,8,5,0,22,9">
+      <action box="0,-2,10,2"/>
      </initial_glyph>
     </initial>
-    <state name="on">
-     <entry brief="LED on">Sumo_printElapsedTime(me);
-ledRed(HIGH);
-//digitalWrite(LED_L, LOW);</entry>
-     <tran trig="Q_TIMEOUT" target="../../2">
-      <tran_glyph conn="2,13,3,1,24,7,-2">
-       <action box="0,-2,16,3"/>
+    <state name="paused">
+     <entry brief="Press-A">ledRed(HIGH);
+
+lcd.clear();
+lcd.print(F(&quot;Press A&quot;));</entry>
+     <tran trig="BUTTON_PRESS" target="../../2">
+      <action>ledRed(LOW);
+me-&gt;ready_time_remaining = 5000;
+QActive_armX((QActive *)me, 0 /*Tick rate */, 10 /* millis */, 10);</action>
+      <tran_glyph conn="37,25,3,3,-18,15,19">
+       <action box="-17,5,16,3"/>
       </tran_glyph>
      </tran>
-     <state_glyph node="2,5,22,11">
+     <state_glyph node="37,17,22,11">
       <entry box="1,2,17,4"/>
      </state_glyph>
     </state>
-    <state name="off">
-     <entry brief="LED off">Sumo_printElapsedTime(me);
-ledRed(LOW);
-//digitalWrite(LED_L, HIGH);</entry>
-     <tran trig="Q_TIMEOUT" target="../../1">
-      <tran_glyph conn="2,26,3,1,26,-16,-4">
-       <action box="0,-2,15,2"/>
+    <state name="getting_ready">
+     <entry brief="LED off"/>
+     <tran trig="Q_TIMEOUT" target="..">
+      <action>me-&gt;ready_time_remaining -= 10; // reduce by 10 millis.
+float timeToPrint = ((float)me-&gt;ready_time_remaining)/1000;
+lcd.clear();
+lcd.print(timeToPrint, 2);
+if(me-&gt;ready_time_remaining &lt;= 0){
+    QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+    QACTIVE_POST((QActive *)me, READY_TIMEOUT_SIG, 0);
+}</action>
+      <tran_glyph conn="60,38,1,2,26,7,-31,-2">
+       <action box="4,4,10,2"/>
       </tran_glyph>
      </tran>
-     <state_glyph node="2,18,22,10">
+     <tran trig="READY_TIMEOUT" target="../../1">
+      <tran_glyph conn="60,36,1,1,12,-12,-13">
+       <action box="-1,-8,19,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="38,33,22,10">
       <entry box="1,2,15,4"/>
      </state_glyph>
     </state>
-    <state_diagram size="30,30"/>
+    <state_diagram size="106,61"/>
+   </statechart>
+  </class>
+  <class name="ButtonPressSimulator" superclass="qpn::QActive">
+   <statechart>
+    <initial target="../1">
+     <action>QActive_armX(&amp;me-&gt;super, 0 /*Tick rate */, 10 /* millis */, 10);</action>
+     <initial_glyph conn="21,12,5,0,5,4">
+      <action box="0,-2,10,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="Running">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action>//lcd.clear();
+//lcd.print(F(&quot;Timer&quot;));
+
+if (buttonA.getSingleDebouncedPress()) {
+    QACTIVE_POST((QActive *)&amp;AO_Sumo, BUTTON_PRESS_SIG, 0);
+}</action>
+      <tran_glyph conn="51,18,1,1,11,12,-11">
+       <action box="0,-2,10,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="20,16,31,17"/>
+    </state>
+    <state_diagram size="80,50"/>
    </statechart>
   </class>
  </package>
  <directory name=".">
-  <file name="Blinky.ino">
-   <text>#include &quot;qpn.h&quot;     // QP-nano framework
+  <file name="PausedStarting.ino">
+   <text>#define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
+
+#include &quot;qpn.h&quot;     // QP-nano framework
 #include &quot;Arduino.h&quot; // Arduino API
 
 #include &quot;Zumo32U4.h&quot;
@@ -61,20 +93,28 @@ ledRed(LOW);
 //============================================================================
 // declare all AO classes...
 $declare(AOs::Sumo)
+$declare(AOs::ButtonPressSimulator)
 //...
 
 // AO instances and event queue buffers for them...
 Sumo AO_Sumo;
+ButtonPressSimulator AO_ButtonSim;
+
+
+// Other objects
 Zumo32U4LCD lcd;
+Zumo32U4ButtonA buttonA;
 
 static QEvt l_SumoQSto[10]; // Event queue storage for Blinky
+static QEvt l_ButtonSimQSto[10];
 //...
 
 //============================================================================
 // QF_active[] array defines all active object control blocks ----------------
 QActiveCB const Q_ROM QF_active[] = {
-    { (QActive *)0,           (QEvt *)0,        0U                  },
-    { (QActive *)&amp;AO_Sumo,  l_SumoQSto,     Q_DIM(l_SumoQSto) }
+    { (QActive *)0,               (QEvt *)0,           0U                        },
+    { (QActive *)&amp;AO_Sumo,        l_SumoQSto,          Q_DIM(l_SumoQSto)         },
+    { (QActive *)&amp;AO_ButtonSim,   l_ButtonSimQSto,     Q_DIM(l_ButtonSimQSto)    }
 };
 
 //============================================================================
@@ -83,6 +123,14 @@ enum {
     BSP_TICKS_PER_SEC = 1000, // number of system clock ticks in one second
 };
 
+enum Signals {
+ BUTTON_PRESS_SIG = Q_USER_SIG,
+ READY_TIMEOUT_SIG,
+ MAXSIGS
+};
+
+
+
 //............................................................................
 void setup() {
     // initialize the QF-nano framework
@@ -90,6 +138,8 @@ void setup() {
 
     // initialize all AOs...
     QActive_ctor(&amp;AO_Sumo.super, Q_STATE_CAST(&amp;Sumo_initial));
+
+    QActive_ctor(&amp;AO_ButtonSim.super, Q_STATE_CAST(&amp;ButtonPressSimulator_initial));
 }
 
 //............................................................................
@@ -161,60 +211,8 @@ void Q_onAssert(char const Q_ROM * const file, int line) {
 //============================================================================
 // define all AO classes (state machine)...
 $define(AOs::Sumo)
+$define(AOs::ButtonPressSimulator)
 //...
-</text>
-  </file>
-  <file name="notes.txt">
-   <text>The following code works:
-ISR(TIMER4_OVF_vect) {
-    QF_tickXISR(0); // process time events for tick rate 0
-}
-
-// Timer/Counter 4 initialization
-// Clock: Sync. 15.625 kHz
-// Mode: Normal top=OCR4C
-// OC4A output: OC4A=Disc. /OC4A=Disc.
-// OC4B output: OC4B=Disc. /OC4B=Disc.
-// OC4D output: OC4D=Disc. /OC4D=Disc.
-// Fault Protection: Off
-// Fault Protection Noise Canceler: Off
-// Fault Protection triggered on Falling Edge
-// Timer4 Overflow Interrupt: On
-// Compare A Match Interrupt: Off
-// Compare B Match Interrupt: Off
-// Compare D Match Interrupt: Off
-// Fault Protection Interrupt: Off
-// Dead Time Prescaler: 1
-// Dead Time Rising Edge: 0.000 us
-// Dead Time Falling Edge: 0.000 us
-// Timer Period: 40 ms
-
-// Set Timer4 for synchronous operation
-PLLFRQ&amp;=(1&lt;&lt;PINMUX) | (1&lt;&lt;PLLUSB) | (0&lt;&lt;PLLTM1) | (0&lt;&lt;PLLTM0) | (1&lt;&lt;PDIV3) | (1&lt;&lt;PDIV2) | (1&lt;&lt;PDIV1) | (1&lt;&lt;PDIV0);
-
-TCCR4A=(0&lt;&lt;COM4A1) | (0&lt;&lt;COM4A0) | (0&lt;&lt;COM4B1) | (0&lt;&lt;COM4B0) | (0&lt;&lt;FOC4A) | (0&lt;&lt;FOC4B) | (0&lt;&lt;PWM4A) | (0&lt;&lt;PWM4B);
-TCCR4B=(0&lt;&lt;PWM4X) | (0&lt;&lt;PSR4) | (0&lt;&lt;DTPS41) | (0&lt;&lt;DTPS40) | (1&lt;&lt;CS43) | (0&lt;&lt;CS42) | (1&lt;&lt;CS41) | (1&lt;&lt;CS40);
-TCCR4C=(0&lt;&lt;COM4A1S) | (0&lt;&lt;COM4A0S) | (0&lt;&lt;COM4B1S) | (0&lt;&lt;COM4B0S) | (0&lt;&lt;COM4D1) | (0&lt;&lt;COM4D0) | (0&lt;&lt;FOC4D) | (0&lt;&lt;PWM4D);
-TCCR4D=(0&lt;&lt;FPIE4) | (0&lt;&lt;FPEN4) | (0&lt;&lt;FPNC4) | (0&lt;&lt;FPES4) | (0&lt;&lt;FPAC4) | (0&lt;&lt;FPF4) | (0&lt;&lt;WGM41) | (0&lt;&lt;WGM40);
-TCCR4E=(0&lt;&lt;TLOCK4) | (0&lt;&lt;ENHC4) | (0&lt;&lt;OC4OE5) | (0&lt;&lt;OC4OE4) | (0&lt;&lt;OC4OE3) | (0&lt;&lt;OC4OE2) | (0&lt;&lt;OC4OE1) | (0&lt;&lt;OC4OE0);
-TC4H=0x00;
-TCNT4=0x00;
-TC4H=0x00;
-OCR4A=0x00;
-TC4H=0x00;
-OCR4B=0x00;
-//TC4H=0x02;
-OCR4C = (F_CPU / BSP_TICKS_PER_SEC / 1024U) - 1U; //OCR4C  = (F_CPU / BSP_TICKS_PER_SEC / 1024U) - 1U;
-//OCR4C=0x70;
-TC4H=0x00;
-OCR4D=0x00;
-DT4=0x00;
-
-// Timer/Counter 4 Interrupt(s) initialization
-TIMSK4=(0&lt;&lt;OCIE4D) | (0&lt;&lt;OCIE4A) | (0&lt;&lt;OCIE4B) | (1&lt;&lt;TOIE4);
-
-
-******************
 </text>
   </file>
  </directory>

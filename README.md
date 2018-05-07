@@ -18,4 +18,4 @@ A.  Follow these steps:
 3. Save as <newmodel>.qm
 4. Change the name of the .ino file in QM interface, as <newmodel>.ino
 5. In the <newmodel> directory, delete the old .qm and .ino files.
-
+6. Open the <newmodel>.ino file in Arduino and launch (or launch it from QM depending on how you have things setup).

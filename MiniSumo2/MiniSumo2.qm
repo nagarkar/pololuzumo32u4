@@ -1,0 +1,600 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model version="4.1.2" links="0">
+ <documentation>See Readme.md</documentation>
+ <framework name="qpn"/>
+ <package name="AOs" stereotype="0x02">
+  <class name="Sumo" superclass="qpn::QActive">
+   <attribute name="ready_time_remaining = 0" type="uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="turn_speed = 250" type="const uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="ready_timeout_ms = 5000" type="const uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="{ LAST_TURN_WAS_LEFT, LAST_TURN_WAS_RIGHT}" type="enum " visibility="0x00" properties="0x00"/>
+   <attribute name="last_turn" type="int" visibility="0x00" properties="0x00"/>
+   <attribute name="scan_timeout = 2000" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="last_boundary_position = LineEvtSimulator::BOUNDARY_ON_LEFT" type="int" visibility="0x00" properties="0x00"/>
+   <attribute name="safety_timeout = 30000" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="debug_mode = true" type="bool" visibility="0x00" properties="0x00"/>
+   <statechart>
+    <initial target="../1">
+     <initial_glyph conn="3,4,5,0,12,3">
+      <action box="0,-2,10,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="paused">
+     <entry brief="display 'Press A'">ledRed(HIGH);
+
+PRINT_IF_ENABLED {
+    lcd.clear();
+    lcd.print(F(&quot;Press A:&quot;));
+
+
+    lcd.gotoXY(0, 1);
+    lcd.print(readBatteryMillivolts());
+    lcd.print(&quot;:&quot;);
+    if(started == 0) {
+        lcd.print(&quot;rst&quot;);
+        started = 1;
+    } else {
+        lcd.print(&quot;ret&quot;);
+    }
+}</entry>
+     <tran trig="BUTTON_PRESS" target="../../2">
+      <action brief="arm timer, reset &quot;time remaining&quot;">ledRed(LOW);
+me-&gt;ready_time_remaining = me-&gt;ready_timeout_ms;
+QActive_armX((QActive *)me, 0 /*Tick rate */, 10 /* millis */, 10);
+
+// Toggle speed (used for debugging)
+//if (me-&gt;debug_mode) {
+//    if (me-&gt;turn_speed == 0) {
+//        me-&gt;turn_speed = 250;
+//    } else {
+//        me-&gt;turn_speed = 0;
+//    }
+//}</action>
+      <tran_glyph conn="10,15,3,3,-7,40,4">
+       <action box="-6,11,25,4"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="10,7,13,11">
+      <entry box="1,2,10,5"/>
+     </state_glyph>
+    </state>
+    <state name="ready">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action brief="decrement time remaining, publish event if countdown complete">me-&gt;ready_time_remaining -= 10; // reduce by 10 millis.
+float timeToPrint = ((float)me-&gt;ready_time_remaining)/1000;
+lcd.clear();
+lcd.print(timeToPrint, 2);
+if(me-&gt;ready_time_remaining &lt;= 0){
+    QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+    QACTIVE_POST((QActive *)me, READY_TIMEOUT_SIG, 0);
+}</action>
+      <tran_glyph conn="16,53,1,2,14,7,-16,-2">
+       <action box="3,7,24,7"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="READY_TIMEOUT" target="../../3">
+      <tran_glyph conn="16,51,1,3,22,-32,15">
+       <action box="2,-3,13,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="7,48,9,10"/>
+    </state>
+    <state name="scanning">
+     <entry brief="arm timer">QActive_armX((QActive *)me, 0 /*Tick rate */, me-&gt;scan_timeout/* millis */, 0);</entry>
+     <exit brief="disarm timer">QActive_disarmX((QActive *)me, 0);
+motors.setSpeeds(0,0);</exit>
+     <initial target="../6">
+      <initial_glyph conn="60,21,4,0,3">
+       <action box="0,-2,10,2"/>
+      </initial_glyph>
+     </initial>
+     <tran trig="Q_TIMEOUT" target="../../4">
+      <tran_glyph conn="63,39,2,3,15,3">
+       <action box="-3,8,10,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="OPPONENT_IN_FRONT" target="../../4">
+      <tran_glyph conn="77,39,2,0,13">
+       <action box="-11,2,19,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="BUTTON_PRESS" target="../../1">
+      <tran_glyph conn="53,13,3,1,-30">
+       <action box="-18,-2,15,2"/>
+      </tran_glyph>
+     </tran>
+     <state name="turn_right">
+      <entry brief="turn right">PRINT_IF_ENABLED {
+    lcd.clear();
+    lcd.print(&quot;SRight&quot;);
+}
+
+motors.setSpeeds(me-&gt;turn_speed, -me-&gt;turn_speed);
+me-&gt;last_turn = me-&gt;LAST_TURN_WAS_RIGHT;</entry>
+      <state_glyph node="76,31,12,6">
+       <entry box="1,2,11,2"/>
+      </state_glyph>
+     </state>
+     <state name="unused">
+      <entry>if (me-&gt;last_boundary_position == LineEvtSimulator::BOUNDARY_ON_LEFT) {
+    status_ = Q_TRAN(&amp;Sumo_turn_right);
+} else {
+    status_ = Q_TRAN(&amp;Sumo_turn_left);
+}
+
+DO_NOT_PRINT {
+    lcd.clear();
+    lcd.print(&quot;LBP:&quot;); lcd.print(me-&gt;last_boundary_position);
+}</entry>
+      <state_glyph node="74,16,10,6">
+       <entry box="1,2,9,2"/>
+      </state_glyph>
+     </state>
+     <state name="turn_left">
+      <entry brief="turn left">PRINT_IF_ENABLED {
+    lcd.clear();
+    lcd.print(&quot;SLeft&quot;);
+}
+
+motors.setSpeeds(-me-&gt;turn_speed, me-&gt;turn_speed);
+me-&gt;last_turn = me-&gt;LAST_TURN_WAS_LEFT;</entry>
+      <state_glyph node="56,24,12,6">
+       <entry box="1,2,11,2"/>
+      </state_glyph>
+     </state>
+     <state_glyph node="53,8,36,31">
+      <entry box="1,2,12,4"/>
+      <exit box="1,6,13,2"/>
+     </state_glyph>
+    </state>
+    <state name="driving">
+     <entry brief="go forward">//QActive_armX((QActive *)me, 0 /*Tick rate */, me-&gt;safety_timeout/* millis */, 0);
+
+uint8_t confidence = Q_PAR(me);
+
+int speed = me-&gt;turn_speed;
+// confidence &gt; 50% we want to move faster than normal.
+if (confidence &gt; 50) {
+    speed = (2 * ((float)confidence)/100) * me-&gt;turn_speed;
+}
+
+motors.setSpeeds(speed, speed);
+
+PRINT_IF_ENABLED {
+    lcd.clear();
+    lcd.print(&quot;Drive&quot;);
+    lcd.gotoXY(0,1);
+    lcd.print(&quot;Sp:&quot;);
+    lcd.print(speed);
+}
+</entry>
+     <exit brief="stop, disarm timer">//QActive_disarmX((QActive *)me, 0);
+motors.setSpeeds(0,0);</exit>
+     <tran trig="OPPONENT_ON_LEFT" target="../../3/6">
+      <tran_glyph conn="66,57,3,2,-7,-27">
+       <action box="-24,-11,17,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="OPPONENT_ON_RIGHT" target="../../3/4">
+      <tran_glyph conn="79,57,1,2,6,-20">
+       <action box="4,-9,19,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="ON_BOUNDARY" target="../../5">
+      <action>// Transfer information about boundary location to state machine variable.
+me-&gt;last_boundary_position = Q_PAR(me);</action>
+      <tran_glyph conn="75,60,2,2,3,44,-34">
+       <action box="19,0,18,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="BUTTON_PRESS" target="../../1">
+      <tran_glyph conn="66,59,3,1,-31,-44,-12">
+       <action box="-26,-3,16,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="OPPONENT_IN_FRONT" target="..">
+      <tran_glyph conn="67,60,2,2,7,6,-7">
+       <action box="-14,7,18,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="66,52,13,8">
+      <entry box="1,2,12,2"/>
+      <exit box="1,4,12,4"/>
+     </state_glyph>
+    </state>
+    <state name="reverse">
+     <entry brief="start reversing, start timer">//int reverse_timeout = 150 * 300 /(me-&gt;turn_speed);
+int reverse_timeout = 500;
+QActive_armX((QActive *)me, 0 /*Tick rate */, reverse_timeout/* millis */, 0);
+
+PRINT_IF_ENABLED {
+    lcd.clear();
+    lcd.print(&quot;reverse&quot;);
+}
+
+motors.setSpeeds(-me-&gt;turn_speed, -me-&gt;turn_speed);</entry>
+     <exit brief="disarm timer">QActive_disarmX((QActive *)me, 0);
+motors.setSpeeds(0,0);</exit>
+     <tran trig="Q_TIMEOUT">
+      <action>DO_NOT_PRINT {
+    lcd.clear();
+    lcd.print(&quot;LBP:&quot;); lcd.print(me-&gt;last_boundary_position);
+}</action>
+      <choice target="../../../3/6">
+       <guard brief="boundary not on left">me-&gt;last_boundary_position != LineEvtSimulator::BOUNDARY_ON_LEFT</guard>
+       <choice_glyph conn="106,11,5,1,-36,15,-2">
+        <action box="-34,0,15,2"/>
+       </choice_glyph>
+      </choice>
+      <choice target="../../../3/4">
+       <guard brief="boundaryonleft">me-&gt;last_boundary_position == LineEvtSimulator::BOUNDARY_ON_LEFT</guard>
+       <choice_glyph conn="106,11,5,1,-16,23,-2">
+        <action box="-15,11,14,2"/>
+       </choice_glyph>
+      </choice>
+      <tran_glyph conn="126,23,1,-1,12,-12,-32">
+       <action box="0,-2,11,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="OPPONENT_IN_FRONT" target="../../4">
+      <tran_glyph conn="124,29,2,2,38,-50,-7">
+       <action box="1,16,22,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="110,20,16,9">
+      <entry box="1,2,14,4"/>
+      <exit box="1,6,14,3"/>
+     </state_glyph>
+    </state>
+    <state_diagram size="176,70"/>
+   </statechart>
+  </class>
+  <class name="ButtonEvtSimulator" superclass="qpn::QActive">
+   <attribute name="period =50" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <statechart>
+    <initial target="../1">
+     <action brief="arm timer">QActive_armX(&amp;me-&gt;super, 0 /*Tick rate */, me-&gt;period /* millis */, me-&gt;period);</action>
+     <initial_glyph conn="21,12,5,0,-9,14">
+      <action box="0,-2,10,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="running">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action brief="publish event if button pressed">//lcd.clear();
+//lcd.print(F(&quot;Timer&quot;));
+
+if (buttonA.getSingleDebouncedPress()) {
+    QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, BUTTON_PRESS_SIG, 0);
+}</action>
+      <tran_glyph conn="37,28,1,1,40,12,-40">
+       <action box="0,-2,36,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="6,26,31,17"/>
+    </state>
+    <state_diagram size="80,50"/>
+   </statechart>
+  </class>
+  <class name="ProximityEvtSimulator" superclass="qpn::QActive">
+   <attribute name="period = 50" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <operation name="getConfidence" type="uint8_t" visibility="0x00" properties="0x01">
+    <parameter name="highValue" type="uint8_t"/>
+    <parameter name="lowValue" type="uint8_t"/>
+    <code>float diff = (float)(highValue - lowValue);
+return 100 * diff/proxSensors.getNumBrightnessLevels();</code>
+   </operation>
+   <statechart>
+    <initial target="../1">
+     <action brief="arm timer, init proximity sensors">proxSensors.initThreeSensors();
+QActive_armX(&amp;me-&gt;super, 0 /*Tick rate */, me-&gt;period /* millis */, me-&gt;period);</action>
+     <initial_glyph conn="17,15,5,0,-3,7">
+      <action box="0,-2,28,3"/>
+     </initial_glyph>
+    </initial>
+    <state name="running">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action brief="read sensors, publish-opponent-location &amp; confidence">proxSensors.read();
+uint8_t frontLeftCount = proxSensors.countsFrontWithLeftLeds();
+uint8_t frontRightCount = proxSensors.countsFrontWithRightLeds();
+uint8_t leftCount = proxSensors.countsLeftWithLeftLeds();
+uint8_t rightCount = proxSensors.countsRightWithRightLeds();
+DO_NOT_PRINT { // Use ALWAYS_PRINT to print
+    lcd.clear();
+    lcd.print(&quot;L:&quot;);
+    lcd.print(leftCount);
+    lcd.print(&quot;FL:&quot;);
+    lcd.print(frontLeftCount);
+    lcd.gotoXY(0, 1);
+    lcd.print(&quot;R:&quot;);
+    lcd.print(rightCount);
+    lcd.print(&quot;FR:&quot;);
+    lcd.print(frontRightCount);
+}
+if(leftCount &gt;= 2) {
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, OPPONENT_ON_LEFT_SIG, 100);
+  //lcd.clear();
+  //lcd.print(&quot;GoLft&quot;);
+} else if (rightCount &gt;= 2) {
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, OPPONENT_ON_RIGHT_SIG, 100);
+  //lcd.clear();
+  //lcd.print(&quot;GoRgt&quot;);
+}
+if (frontLeftCount &gt;= 5 || frontRightCount  &gt;= 5) {
+
+  // 6 is 100% confidence based on experimental results for a 32&quot; sumo mat with robot in center
+  // and opponent straight in front on boundary.
+  int confidence = 100 * ((float)(frontLeftCount + frontRightCount))/6;
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1,  OPPONENT_IN_FRONT_SIG, confidence);
+
+}
+/*
+else if (rightCount &lt;= 3) {
+  QACTIVE_POST((QActive *)&amp;AO_Sumo, OPPONENT_ON_RIGHT_SIG, 0);
+} else {
+  uint8_t confidence = ProximityEvtSimulator_getConfidence(rightCount, 0);
+  QACTIVE_POST((QActive *)&amp;AO_Sumo, OPPONENT_IN_FRONT_SIG, confidence);
+}
+*/</action>
+      <tran_glyph conn="31,26,1,1,38,6,-38">
+       <action box="0,-2,44,5"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="11,22,20,12"/>
+    </state>
+    <state_diagram size="80,50"/>
+   </statechart>
+  </class>
+  <class name="LineEvtSimulator" superclass="qpn::QActive">
+   <documentation>Line Event Simulator</documentation>
+   <attribute name="period = 20" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="line_sensor_threshold = 1000" type="const uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="boundary_position" type="enum { BOUNDARY_ON_LEFT, BOUNDARY_ON_RIGHT, BOUNDARY_IN_FRONT }" visibility="0x00" properties="0x00"/>
+   <operation name="printToLCD" type="void" visibility="0x00" properties="0x00">
+    <parameter name="lineSensorValues" type="uint16_t *"/>
+    <code>// On the first line of the LCD, display the bar graph.
+lcd.gotoXY(0, 0);
+for (uint8_t i = 0; i &lt; 5; i++)
+{
+    uint8_t barHeight = map(lineSensorValues[i], 0, 2000, 0, 8);
+    LineEvtSimulator_printBar(me, barHeight);
+}</code>
+   </operation>
+   <operation name="printBar" type="void" visibility="0x00" properties="0x00">
+    <parameter name="height" type="uint8_t"/>
+    <code>if (height &gt; 8) { height = 8; }
+const char barChars[] = {' ', 0, 1, 2, 3, 4, 5, 6, 255};
+lcd.print(barChars[height]);</code>
+   </operation>
+   <statechart>
+    <initial target="../1">
+     <action brief="arm timer, init line sensors">lineSensors.initFiveSensors();
+
+QActive_armX(&amp;me-&gt;super, 0 /*Tick rate */, me-&gt;period /* millis */, me-&gt;period);
+
+// Setup LCD characters required for printing line values to LCD
+static const char levels[] PROGMEM = {
+    0, 0, 0, 0, 0, 0, 0, 63, 63, 63, 63, 63, 63, 63
+  };
+lcd.loadCustomCharacter(levels + 0, 0);  // 1 bar
+lcd.loadCustomCharacter(levels + 1, 1);  // 2 bars
+lcd.loadCustomCharacter(levels + 2, 2);  // 3 bars
+lcd.loadCustomCharacter(levels + 3, 3);  // 4 bars
+lcd.loadCustomCharacter(levels + 4, 4);  // 5 bars
+lcd.loadCustomCharacter(levels + 5, 5);  // 6 bars
+lcd.loadCustomCharacter(levels + 6, 6);  // 7 bars</action>
+     <initial_glyph conn="19,16,5,0,-3,10">
+      <action box="0,-2,25,2"/>
+     </initial_glyph>
+    </initial>
+    <state name="running">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action brief="read sensors, publish location event">unsigned int line_sensor_values[5];
+lineSensors.read(line_sensor_values);
+
+DO_NOT_PRINT {
+    lcd.clear();
+    LineEvtSimulator_printToLCD(me, line_sensor_values);
+}
+
+uint16_t leftSensor   = line_sensor_values[0];
+uint16_t middleSensor = line_sensor_values[2];
+uint16_t rightSensor  = line_sensor_values[4];
+uint16_t threshold    = me-&gt;line_sensor_threshold;
+
+if (leftSensor &lt; threshold &amp;&amp; rightSensor &lt; threshold) {    // sensor 0 is on left
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, ON_BOUNDARY_SIG, me-&gt;BOUNDARY_IN_FRONT);
+  DO_NOT_PRINT{ lcd.clear(); lcd.print(&quot;BOUND_FR&quot;);}
+}
+else if (leftSensor &lt; threshold) {    // sensor 0 is on left
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, ON_BOUNDARY_SIG, me-&gt;BOUNDARY_ON_LEFT);
+  DO_NOT_PRINT { lcd.clear(); lcd.print(&quot;BOUND_L&quot;);}
+}
+else if (rightSensor &lt; threshold) {// sensor 4 is on right
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, ON_BOUNDARY_SIG, me-&gt;BOUNDARY_ON_RIGHT);
+  DO_NOT_PRINT { lcd.clear(); lcd.print(&quot;BOUND_R&quot;);}
+}
+//else if (line_sensor_values[2] &lt; me-&gt;line_sensor_threshold) { // sensor 2 is on middle.
+  //QACTIVE_POST((QActive *)&amp;AO_Sumo, ON_BOUNDARY_SIG, me-&gt;BOUNDARY_IN_FRONT);
+//}
+else {
+  QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, IN_RING_SIG, 0);
+  DO_NOT_PRINT { lcd.clear(); lcd.print(&quot;INR&quot;);}
+}</action>
+      <tran_glyph conn="35,29,1,1,41,9,-41">
+       <action box="0,-2,40,2"/>
+      </tran_glyph>
+     </tran>
+     <state_glyph node="11,26,24,14"/>
+    </state>
+    <state_diagram size="80,50"/>
+   </statechart>
+  </class>
+ </package>
+ <directory name=".">
+  <file name="MiniSumo2.ino">
+   <text>#define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
+
+#include &quot;qpn.h&quot;     // QP-nano framework
+#include &quot;Arduino.h&quot; // Arduino API
+
+#include &quot;Zumo32U4.h&quot;
+
+static int DISABLE_PRINT = 0; // false
+
+#define PRINT_IF_ENABLED if (!DISABLE_PRINT)
+#define ALWAYS_PRINT if (1==1)
+#define DO_NOT_PRINT if (1==0)
+
+static int started = 0;
+
+//============================================================================
+// declare all AO classes...
+$declare(AOs::LineEvtSimulator)
+$declare(AOs::Sumo)
+$declare(AOs::ButtonEvtSimulator)
+$declare(AOs::ProximityEvtSimulator)
+//...
+
+// AO instances and event queue buffers for them...
+Sumo AO_Sumo;
+ButtonEvtSimulator AO_ButtonSim;
+ProximityEvtSimulator AO_ProximitySim;
+LineEvtSimulator AO_LineSim;
+
+
+// Other objects
+Zumo32U4LCD lcd;
+Zumo32U4ButtonA buttonA;
+Zumo32U4Motors motors;
+Zumo32U4LineSensors lineSensors;
+Zumo32U4ProximitySensors proxSensors;
+
+
+static QEvt l_SumoQSto[10]; // Event queue storage for Blinky
+static QEvt l_ButtonSimQSto[10];
+static QEvt l_ProxSimQSto[10];
+static QEvt l_LineSimQSto[10];
+
+//...
+
+//============================================================================
+// QF_active[] array defines all active object control blocks ----------------
+QActiveCB const Q_ROM QF_active[] = {
+    { (QActive *)0,               (QEvt *)0,           0U                        },
+    { (QActive *)&amp;AO_Sumo,        l_SumoQSto,          Q_DIM(l_SumoQSto)         },
+    { (QActive *)&amp;AO_ButtonSim,   l_ButtonSimQSto,     Q_DIM(l_ButtonSimQSto)    },
+    { (QActive *)&amp;AO_ProximitySim,l_ProxSimQSto,       Q_DIM(l_ProxSimQSto)      },
+    { (QActive *)&amp;AO_LineSim,     l_LineSimQSto,       Q_DIM(l_LineSimQSto)      }
+};
+
+//============================================================================
+// various constants for the application...
+enum {
+    BSP_TICKS_PER_SEC = 1000, // number of system clock ticks in one second
+};
+
+enum Signals {
+ BUTTON_PRESS_SIG = Q_USER_SIG,
+ READY_TIMEOUT_SIG,
+ OPPONENT_ON_RIGHT_SIG,
+ OPPONENT_ON_LEFT_SIG,
+ OPPONENT_IN_FRONT_SIG,
+ IN_RING_SIG,
+ ON_BOUNDARY_SIG,
+ MAXSIGS
+};
+
+
+
+//............................................................................
+void setup() {
+    // initialize the QF-nano framework
+    QF_init(Q_DIM(QF_active));
+
+    // initialize all AOs...
+    QActive_ctor(&amp;AO_Sumo.super,         Q_STATE_CAST(&amp;Sumo_initial));
+
+    QActive_ctor(&amp;AO_ButtonSim.super,    Q_STATE_CAST(&amp;ButtonEvtSimulator_initial));
+
+    QActive_ctor(&amp;AO_ProximitySim.super, Q_STATE_CAST(&amp;ProximityEvtSimulator_initial));
+
+    QActive_ctor(&amp;AO_LineSim.super,      Q_STATE_CAST(&amp;LineEvtSimulator_initial));
+}
+
+//............................................................................
+void loop() {
+    QF_run(); // run the QF-nano framework
+}
+
+//============================================================================
+// interrupts...
+ISR(TIMER4_COMPA_vect) {
+    QF_tickXISR(0); // process time events for tick rate 0
+}
+
+//============================================================================
+// QF callbacks...
+void QF_onStartup(void) {
+
+    /**
+        1. Generally, ignoring TC4H when writing TCNT, OCR and other registers
+           (i.e. we assume it is zero) in each case as we expect the count to fit in 8 bits.
+        2. General idea is to use OCR4A to generate an interrupt. We could also use the overflow interrupt, but a
+           handler for that is defined in the pololu library code, so compilation will fail or we will need to 
+           remove the handler from the pololu code.
+        3. See below for specifics about interaction between OCR4A and OCR4C.
+    */
+
+    // TCCR4A is used to generate output pin signals (along with interrupt), but we don't want to generate output.
+    TCCR4A = 0;
+    // Prescale by 1/128
+    TCCR4B = (0&lt;&lt;PWM4X) | (0&lt;&lt;PSR4) | (0&lt;&lt;DTPS41) | (0&lt;&lt;DTPS40) | (1&lt;&lt;CS43) | (0&lt;&lt;CS42) | (0&lt;&lt;CS41) | (0&lt;&lt;CS40);
+
+    // For some reason, not setting TCCR4D to zero explicitly results in doubling the time interval. All initial
+    // values of TCCR4D are zero according to the datasheet. Since I was unable to explain this, I have expliclty
+    // set all control registers to zero instead of assuming they are zero.
+    TCCR4C = 0;
+    TCCR4D = 0;
+    TCCR4E = 0;
+
+    TCNT4=0x00;
+
+    /* Calculate Timer Count Max.
+        1. We don't explicilty set OCR4B/D as it is not used. Setting it has no effect (verified).
+        2. We set OCR4C to the same value as OCR4A. OCR4A generates an interrupt on compare match.
+           OCR4C contains the 'TOP' value,  i.e. the value to which the timer is reset.
+        2.1 Note: Not setting OCR4C causes the uP to double the count. No idea why. (verified)
+        2.2 Note: Setting OCR4C to zero or Setting it to a value other than OCR4A, results in no OCR4A interrupt being generated. (verified)
+    */
+    OCR4A  = (F_CPU / BSP_TICKS_PER_SEC / 128U) - 1;
+    OCR4C =(F_CPU / BSP_TICKS_PER_SEC / 128U) - 1U;
+
+    // Enable TIMER compare Interrupt for OCR4A
+    TIMSK4= (1&lt;&lt;OCIE4A);
+}
+//............................................................................
+void QV_onIdle(void) {   // called with interrupts DISABLED
+    // Put the CPU and peripherals to the low-power mode. You might
+    // need to customize the clock management for your application,
+    // see the datasheet for your particular AVR MCU.
+    SMCR = (0 &lt;&lt; SM0) | (1 &lt;&lt; SE); // idle mode, adjust to your project
+    QV_CPU_SLEEP();  // atomically go to sleep and enable interrupts
+}
+//............................................................................
+void Q_onAssert(char const Q_ROM * const file, int line) {
+    // implement the error-handling policy for your application!!!
+    QF_INT_DISABLE(); // disable all interrupts
+    QF_RESET();  // reset the CPU
+}
+
+//============================================================================
+// define all AO classes (state machine)...
+$define(AOs::Sumo)
+$define(AOs::ButtonEvtSimulator)
+$define(AOs::ProximityEvtSimulator)
+$define(AOs::LineEvtSimulator)
+//...
+</text>
+  </file>
+ </directory>
+</model>
