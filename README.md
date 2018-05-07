@@ -2,14 +2,19 @@ Examples for Pololu Zumo 32u4 robot running QP state machines.
 
 Prerequisites:
 - The Pololu Zumo 32u4 robot to run these examples.
-- Install the QM modeler
+- Install v4.2 or the latest version of the QM modeler (https://sourceforge.net/projects/qpc/files/QM/)
 - Arduino IDE
-- Install the QPN and Pololu zomo 32u4 libraries in Arduino
-- There are two good ways to do development on this:
--- Use Arduino IDE to compile and upload; Setup Arduino IDE with 'external editor' preference so you can use QM modeler for editing. Switch between them (QM for code, Arduino for compile/upload).
--- Use QM for everything, using external tools preferences as defined in the .Blinky file in the source directory.
+- Install the QPN and Pololu zomo 32u4 libraries in Arduino (Sketch->Include Libraries -> Manage Libraries)
+- Dev option 1: Compile/load with Arduino, Modify state machines using QM. (this is my way)
+- Dev option 2: Use QM for everything, using external tools preferences as defined in the .Blinky file in the source directory.
 
-Useful documentation:
+Steps:
+- Open the .qm file from one of the directories (e.g. MiniSumo2)
+- Please the Generate Code icon in the toolbar. This generates a .ino file on disk.
+- Open the .ino file in Arduino. Set File->Prefereences->Use external IDE so Arduino is updated automatically when you regenerate code in QM.
+- Verify/Upload code. Pick Tools->Board->Pololu A-star 32u4. Usually the correct port is automatically picked by Arduino and COM10 usually works for me.
+
+Useful documentation (no need to read these before proceeding):
 1. Shortform description of Timer 4 (https://goo.gl/9tUArV)
 2. 32U4 processor datasheet: (https://goo.gl/4L7tAf)
 3. Zumo 32u4 arduino library (https://www.pololu.com/docs/0J63/6)
