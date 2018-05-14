@@ -26,8 +26,8 @@
 static int DISABLE_PRINT = 0; // false
 
 #define PRINT_IF_ENABLED if (!DISABLE_PRINT)
-#define ALWAYS_PRINT if (1==1)
-#define DO_NOT_PRINT if (1==0)
+#define MY_ENABLE if (1==1)
+#define MY_DISABLE if (1==0)
 
 static int started = 0;
 
@@ -40,7 +40,7 @@ typedef struct LineEvtSimulator {
     QActive super;
 
 /* public: */
-    const uint8_t period = 20;
+    const uint8_t period = 10;
 } LineEvtSimulator;
 
 /* public: */
@@ -74,15 +74,16 @@ typedef struct Sumo {
 
 /* public: */
     uint16_t ready_time_remaining = 0;
-    const uint16_t turn_speed = 400;
-    const uint16_t ready_timeout_ms = 5000;
-    const uint8_t calibration_timeout = 2000;
+    uint16_t turn_speed = 400;
+    const uint16_t ready_timeout_ms = 2000;
+    const uint16_t calibration_timeout = 2000;
     bool debug_mode = true;
-    const float kp = 0.25;
+    const float kp = 0.35;
     const float ki = 0;
-    const float kd = 6;
-    int16_t last_error;
-    long total_error;
+    const float kd = 2;
+    int last_error = 0;
+    long total_error = 0;
+    const uint8_t calibration_cycle_time = 50;
 } Sumo;
 
 /* protected: */
@@ -90,7 +91,7 @@ static QState Sumo_initial(Sumo * const me);
 static QState Sumo_paused(Sumo * const me);
 static QState Sumo_ready(Sumo * const me);
 static QState Sumo_calibrating(Sumo * const me);
-static QState Sumo_waiting_for_position(Sumo * const me);
+static QState Sumo_waiting_and_refresh_pos(Sumo * const me);
 static QState Sumo_pid_line_follow(Sumo * const me);
 /*$enddecl${AOs::Sumo} #####################################################*/
 
@@ -230,6 +231,14 @@ void Q_onAssert(char const Q_ROM * const file, int line) {
 /*${AOs::Sumo::SM} .........................................................*/
 static QState Sumo_initial(Sumo * const me) {
     /*${AOs::Sumo::SM::initial} */
+    int batt = readBatteryMillivolts();
+    if (batt > 6000) {
+        me->turn_speed = 300;
+    } else if (batt > 5000) {
+        me->turn_speed = 350;
+    } else {
+        me->turn_speed = 400;
+    }
     return Q_TRAN(&Sumo_paused);
 }
 /*${AOs::Sumo::SM::paused} .................................................*/
@@ -240,7 +249,7 @@ static QState Sumo_paused(Sumo * const me) {
         case Q_ENTRY_SIG: {
             ledRed(HIGH);
 
-            PRINT_IF_ENABLED {
+            MY_ENABLE {
                 lcd.clear();
                 lcd.print(F("Press A:"));
 
@@ -286,6 +295,15 @@ static QState Sumo_paused(Sumo * const me) {
 static QState Sumo_ready(Sumo * const me) {
     QState status_;
     switch (Q_SIG(me)) {
+        /*${AOs::Sumo::SM::ready} */
+        case Q_ENTRY_SIG: {
+            MY_ENABLE {
+                lcd.clear();
+                lcd.print("READY");
+            }
+            status_ = Q_HANDLED();
+            break;
+        }
         /*${AOs::Sumo::SM::ready::Q_TIMEOUT} */
         case Q_TIMEOUT_SIG: {
             me->ready_time_remaining -= 10; // reduce by 10 millis.
@@ -301,6 +319,11 @@ static QState Sumo_ready(Sumo * const me) {
         }
         /*${AOs::Sumo::SM::ready::READY_TIMEOUT} */
         case READY_TIMEOUT_SIG: {
+            QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+
+            QActive_armX((QActive *)me, 0 /*Tick rate */,
+                 me->calibration_cycle_time, me->calibration_cycle_time);
+            me->ready_time_remaining = me->calibration_timeout;
             status_ = Q_TRAN(&Sumo_calibrating);
             break;
         }
@@ -317,17 +340,27 @@ static QState Sumo_calibrating(Sumo * const me) {
     switch (Q_SIG(me)) {
         /*${AOs::Sumo::SM::calibrating} */
         case Q_ENTRY_SIG: {
-            QActive_armX((QActive *)me, 0 /*Tick rate */, me->calibration_timeout /* millis */, 0);
             motors.setSpeeds(-200, 200);
+            MY_ENABLE {
+                lcd.clear();
+                lcd.print("Calib");
+            }
+
             status_ = Q_HANDLED();
             break;
         }
         /*${AOs::Sumo::SM::calibrating} */
         case Q_EXIT_SIG: {
-            lineSensors.calibrate();
-            QActive_disarmX((QActive *)me, 0);
-            motors.setSpeeds(0,0);
-            QACTIVE_POST((QActive *)&AO_LineSim, RUN_SIG, 0 /* don't care */);
+            MY_DISABLE {
+                lcd.clear();
+                lcd.print(*lineSensors.calibratedMinimumOff);
+                lcd.print(",");
+                lcd.print(*lineSensors.calibratedMinimumOn);
+                lcd.gotoXY(0,1);
+                lcd.print(*lineSensors.calibratedMaximumOff);
+                lcd.print(",");
+                lcd.print(*lineSensors.calibratedMaximumOn);
+            }
             status_ = Q_HANDLED();
             break;
         }
@@ -338,7 +371,28 @@ static QState Sumo_calibrating(Sumo * const me) {
         }
         /*${AOs::Sumo::SM::calibrating::Q_TIMEOUT} */
         case Q_TIMEOUT_SIG: {
-            status_ = Q_TRAN(&Sumo_waiting_for_position);
+            // Main action
+            lineSensors.calibrate();
+
+
+            // Time keeping
+            me->ready_time_remaining -= 50; // reduce by 10 millis.
+            float timeToPrint = ((float)me->ready_time_remaining)/1000;
+            lcd.clear();
+            lcd.print(timeToPrint, 2);
+
+            // Exit condition
+            if(me->ready_time_remaining <= 0){
+                QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+                QACTIVE_POST((QActive *)me, READY_TIMEOUT_SIG, 0);
+                QACTIVE_POST((QActive *)&AO_LineSim, RUN_SIG, 0 /* don't care */);
+            }
+            status_ = Q_TRAN(&Sumo_calibrating);
+            break;
+        }
+        /*${AOs::Sumo::SM::calibrating::READY_TIMEOUT} */
+        case READY_TIMEOUT_SIG: {
+            status_ = Q_TRAN(&Sumo_waiting_and_refresh_pos);
             break;
         }
         default: {
@@ -348,26 +402,33 @@ static QState Sumo_calibrating(Sumo * const me) {
     }
     return status_;
 }
-/*${AOs::Sumo::SM::waiting_for_position} ...................................*/
-static QState Sumo_waiting_for_position(Sumo * const me) {
+/*${AOs::Sumo::SM::waiting_and_refresh_pos} ................................*/
+static QState Sumo_waiting_and_refresh_pos(Sumo * const me) {
     QState status_;
     switch (Q_SIG(me)) {
-        /*${AOs::Sumo::SM::waiting_for_position} */
+        /*${AOs::Sumo::SM::waiting_and_refresh_pos} */
         case Q_ENTRY_SIG: {
-            //QActive_armX((QActive *)me, 0 /*Tick rate */, me->safety_timeout/* millis */, 0);
-            status_ = Q_HANDLED();
-            break;
-        }
-        /*${AOs::Sumo::SM::waiting_for_position} */
-        case Q_EXIT_SIG: {
-            //QActive_disarmX((QActive *)me, 0);
+            MY_ENABLE {
+                lcd.clear();
+                lcd.print("WAIT");
+            }
             motors.setSpeeds(0,0);
             status_ = Q_HANDLED();
             break;
         }
-        /*${AOs::Sumo::SM::waiting_for_posi~::LINE_POSITION_UPDATE} */
-        case LINE_POSITION_UPDATE_SIG: {
+        /*${AOs::Sumo::SM::waiting_and_refr~::BUTTON_PRESS} */
+        case BUTTON_PRESS_SIG: {
             status_ = Q_TRAN(&Sumo_pid_line_follow);
+            break;
+        }
+        /*${AOs::Sumo::SM::waiting_and_refr~::LINE_POSITION_UPDATE} */
+        case LINE_POSITION_UPDATE_SIG: {
+            unsigned int line_position = Q_PAR(me);
+            MY_DISABLE {
+                lcd.clear();
+                lcd.print(line_position);
+            }
+            status_ = Q_TRAN(&Sumo_waiting_and_refresh_pos);
             break;
         }
         default: {
@@ -383,29 +444,65 @@ static QState Sumo_pid_line_follow(Sumo * const me) {
     switch (Q_SIG(me)) {
         /*${AOs::Sumo::SM::pid_line_follow} */
         case Q_ENTRY_SIG: {
-            int16_t line_position = Q_PAR(me);
+            MY_DISABLE {
+                lcd.clear();
+                lcd.print("PID");
+            }
 
-            if (line_position > 0) {
+            unsigned int line_position = Q_PAR(me);
+            MY_DISABLE {
+                lcd.clear();
+                lcd.print(line_position);
+            }
+
+            if (line_position >= 0) {
+                // Calculate error
                 int16_t error = line_position - 2000; /* 2000 is desired position */
 
-                int16_t speedDifference
-                    = ((float)error)                     * me->kp +
-                      ((float)(error - me->last_error))  * me->kd +
-                      ((float)(error + me->total_error)) * me->ki;
+                // Compute PID control
+                //int16_t speedDifference = error / 4;
+                int16_t speedDifference  =
+                          ((float)error)                     * me->kp
+                        + ((float)(error - me->last_error))  * me->kd
+                      // + ((float)(error + me->total_error)) * me->ki
+                    ;
 
-                int16_t leftSpeed = (int16_t)me->turn_speed + speedDifference;
-                int16_t rightSpeed =(int16_t)me->turn_speed - speedDifference;
+                // Update state;
+                me->last_error = error;
+                me->total_error = me->total_error + error;
 
-                leftSpeed  = constrain(leftSpeed,  0, (int16_t)me->turn_speed);
-                rightSpeed = constrain(rightSpeed, 0, (int16_t)me->turn_speed);
+                // Calculate input with PID, within rated limits.
+                int16_t leftSpeed = me->turn_speed + speedDifference;
+                int16_t rightSpeed = me->turn_speed - speedDifference;
 
+                leftSpeed  = constrain(leftSpeed,  0, me->turn_speed);
+                rightSpeed = constrain(rightSpeed, 0, me->turn_speed);
+
+                // Send speed to motor
                 motors.setSpeeds(leftSpeed, rightSpeed);
+
+                MY_ENABLE {
+                    lcd.clear();
+                    lcd.print("LS:");lcd.print(leftSpeed);
+                    lcd.gotoXY(0,1);
+                    lcd.print("RS:");lcd.print(rightSpeed);
+                }
             }
+            status_ = Q_HANDLED();
+            break;
+        }
+        /*${AOs::Sumo::SM::pid_line_follow} */
+        case Q_EXIT_SIG: {
+            motors.setSpeeds(0,0);
             status_ = Q_HANDLED();
             break;
         }
         /*${AOs::Sumo::SM::pid_line_follow::LINE_POSITION_UPDATE} */
         case LINE_POSITION_UPDATE_SIG: {
+            MY_ENABLE {
+                lcd.clear();
+                lcd.print("LPUPD EVENT");
+            }
             status_ = Q_TRAN(&Sumo_pid_line_follow);
             break;
         }
@@ -486,15 +583,19 @@ static QState LineEvtSimulator_running(LineEvtSimulator * const me) {
         case Q_TIMEOUT_SIG: {
             unsigned int line_sensor_values[5];
 
-            // Expect calibration is done before we transition to this state.
-
-            ALWAYS_PRINT {
+            MY_DISABLE {
+                lineSensors.readCalibrated(line_sensor_values);
                 lcd.clear();
                 LineEvtSimulator_printToLCD(me, line_sensor_values);
             }
 
-            unsigned int lineSensorValues[5]; // dummy, we won't use it.
-            int position = lineSensors.readLine(lineSensorValues);
+            unsigned int position = lineSensors.readLine(line_sensor_values);
+
+            MY_DISABLE {
+                lcd.clear();//lcd.gotoXY(0,1);
+                lcd.print(position);
+            }
+
             QACTIVE_POST_X((QActive *)&AO_Sumo, 1, LINE_POSITION_UPDATE_SIG, position);
             status_ = Q_TRAN(&LineEvtSimulator_running);
             break;
@@ -517,7 +618,7 @@ static QState LineEvtSimulator_waiting_to_run(LineEvtSimulator * const me) {
             // Setup LCD characters required for printing line values to LCD
             static const char levels[] PROGMEM = {
                 0, 0, 0, 0, 0, 0, 0, 63, 63, 63, 63, 63, 63, 63
-              };
+            };
             lcd.loadCustomCharacter(levels + 0, 0);  // 1 bar
             lcd.loadCustomCharacter(levels + 1, 1);  // 2 bars
             lcd.loadCustomCharacter(levels + 2, 2);  // 3 bars

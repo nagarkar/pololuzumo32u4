@@ -5,17 +5,26 @@
  <package name="AOs" stereotype="0x02">
   <class name="Sumo" superclass="qpn::QActive">
    <attribute name="ready_time_remaining = 0" type="uint16_t" visibility="0x00" properties="0x00"/>
-   <attribute name="turn_speed = 400" type="const uint16_t" visibility="0x00" properties="0x00"/>
-   <attribute name="ready_timeout_ms = 5000" type="const uint16_t" visibility="0x00" properties="0x00"/>
-   <attribute name="calibration_timeout = 2000" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="turn_speed = 400" type="uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="ready_timeout_ms = 2000" type="const uint16_t" visibility="0x00" properties="0x00"/>
+   <attribute name="calibration_timeout = 2000" type="const uint16_t" visibility="0x00" properties="0x00"/>
    <attribute name="debug_mode = true" type="bool" visibility="0x00" properties="0x00"/>
    <attribute name="kp = 0.25" type="const float" visibility="0x00" properties="0x00"/>
    <attribute name="ki = 0" type="const float" visibility="0x00" properties="0x00"/>
    <attribute name="kd = 6" type="const float" visibility="0x00" properties="0x00"/>
-   <attribute name="last_error" type="int16_t" visibility="0x00" properties="0x00"/>
-   <attribute name="total_error" type="long" visibility="0x00" properties="0x00"/>
+   <attribute name="last_error = 0" type="int" visibility="0x00" properties="0x00"/>
+   <attribute name="total_error = 0" type="long" visibility="0x00" properties="0x00"/>
+   <attribute name="calibration_cycle_time = 50" type="const uint8_t" visibility="0x00" properties="0x00"/>
    <statechart>
     <initial target="../1">
+     <action>int batt = readBatteryMillivolts();
+if (batt &gt; 6000) {
+    me-&gt;turn_speed = 300;
+} else if (batt &gt; 5000) {
+    me-&gt;turn_speed = 350;
+} else {
+    me-&gt;turn_speed = 400;
+}</action>
      <initial_glyph conn="3,4,5,0,12,3">
       <action box="0,-2,10,2"/>
      </initial_glyph>
@@ -23,7 +32,7 @@
     <state name="paused">
      <entry brief="display 'Press A'">ledRed(HIGH);
 
-PRINT_IF_ENABLED {
+MY_ENABLE {
     lcd.clear();
     lcd.print(F(&quot;Press A:&quot;));
 
@@ -60,6 +69,10 @@ QActive_armX((QActive *)me, 0 /*Tick rate */, 10 /* millis */, 10);
      </state_glyph>
     </state>
     <state name="ready">
+     <entry>MY_ENABLE {
+    lcd.clear();
+    lcd.print(&quot;READY&quot;);
+}</entry>
      <tran trig="Q_TIMEOUT" target="..">
       <action brief="decrement time remaining, publish event if countdown complete">me-&gt;ready_time_remaining -= 10; // reduce by 10 millis.
 float timeToPrint = ((float)me-&gt;ready_time_remaining)/1000;
@@ -74,27 +87,65 @@ if(me-&gt;ready_time_remaining &lt;= 0){
       </tran_glyph>
      </tran>
      <tran trig="READY_TIMEOUT" target="../../3">
+      <action brief="disam/rearm">QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+
+QActive_armX((QActive *)me, 0 /*Tick rate */,
+     me-&gt;calibration_cycle_time, me-&gt;calibration_cycle_time);
+me-&gt;ready_time_remaining = me-&gt;calibration_timeout;</action>
       <tran_glyph conn="19,38,1,3,22,-19,12">
-       <action box="2,-3,13,2"/>
+       <action box="0,-5,26,2"/>
       </tran_glyph>
      </tran>
-     <state_glyph node="10,35,9,10"/>
+     <state_glyph node="10,35,9,10">
+      <entry box="1,2,6,2"/>
+     </state_glyph>
     </state>
     <state name="calibrating">
-     <entry brief="arm timer">QActive_armX((QActive *)me, 0 /*Tick rate */, me-&gt;calibration_timeout /* millis */, 0);
-motors.setSpeeds(-200, 200);</entry>
-     <exit brief="disarm timer">lineSensors.calibrate();
-QActive_disarmX((QActive *)me, 0);
-motors.setSpeeds(0,0);
-QACTIVE_POST((QActive *)&amp;AO_LineSim, RUN_SIG, 0 /* don't care */);</exit>
+     <entry brief="arm timer">motors.setSpeeds(-200, 200);
+MY_ENABLE {
+    lcd.clear();
+    lcd.print(&quot;Calib&quot;);
+}
+</entry>
+     <exit brief="disarm timer">MY_DISABLE {
+    lcd.clear();
+    lcd.print(*lineSensors.calibratedMinimumOff);
+    lcd.print(&quot;,&quot;);
+    lcd.print(*lineSensors.calibratedMinimumOn);
+    lcd.gotoXY(0,1);
+    lcd.print(*lineSensors.calibratedMaximumOff);
+    lcd.print(&quot;,&quot;);
+    lcd.print(*lineSensors.calibratedMaximumOn);
+}</exit>
      <tran trig="BUTTON_PRESS" target="../../1">
       <tran_glyph conn="53,13,3,1,-30">
        <action box="-18,-2,15,2"/>
       </tran_glyph>
      </tran>
-     <tran trig="Q_TIMEOUT" target="../../4">
+     <tran trig="Q_TIMEOUT" target="..">
+      <action>// Main action 
+lineSensors.calibrate();
+
+
+// Time keeping
+me-&gt;ready_time_remaining -= 50; // reduce by 10 millis.
+float timeToPrint = ((float)me-&gt;ready_time_remaining)/1000;
+lcd.clear();
+lcd.print(timeToPrint, 2);
+
+// Exit condition
+if(me-&gt;ready_time_remaining &lt;= 0){
+    QActive_disarmX((QActive *)me, 0 /*Tick rate */);
+    QACTIVE_POST((QActive *)me, READY_TIMEOUT_SIG, 0);
+    QACTIVE_POST((QActive *)&amp;AO_LineSim, RUN_SIG, 0 /* don't care */);
+}</action>
+      <tran_glyph conn="76,23,1,1,10,-11,-10">
+       <action box="0,1,21,2"/>
+      </tran_glyph>
+     </tran>
+     <tran trig="READY_TIMEOUT" target="../../4">
       <tran_glyph conn="63,24,2,0,7">
-       <action box="1,2,10,2"/>
+       <action box="1,3,25,2"/>
       </tran_glyph>
      </tran>
      <state_glyph node="53,8,23,16">
@@ -102,51 +153,94 @@ QACTIVE_POST((QActive *)&amp;AO_LineSim, RUN_SIG, 0 /* don't care */);</exit>
       <exit box="1,6,13,2"/>
      </state_glyph>
     </state>
-    <state name="waiting_for_position">
-     <entry brief="update speeds">//QActive_armX((QActive *)me, 0 /*Tick rate */, me-&gt;safety_timeout/* millis */, 0);</entry>
-     <exit brief="stopmotors">//QActive_disarmX((QActive *)me, 0);
-motors.setSpeeds(0,0);</exit>
-     <tran trig="LINE_POSITION_UPDATE" target="../../5">
+    <state name="waiting_and_refresh_pos">
+     <entry brief="stop motor">MY_ENABLE {
+    lcd.clear();
+    lcd.print(&quot;WAIT&quot;);
+}
+motors.setSpeeds(0,0);</entry>
+     <tran trig="BUTTON_PRESS" target="../../5">
       <tran_glyph conn="76,34,1,3,28">
        <action box="6,2,21,2"/>
       </tran_glyph>
      </tran>
+     <tran trig="LINE_POSITION_UPDATE" target="..">
+      <action brief="show pos">unsigned int line_position = Q_PAR(me);
+MY_DISABLE {
+    lcd.clear();
+    lcd.print(line_position);
+}</action>
+      <tran_glyph conn="56,45,2,2,13,17,-13">
+       <action box="-2,15,29,2"/>
+      </tran_glyph>
+     </tran>
      <state_glyph node="53,31,23,14">
       <entry box="1,2,12,2"/>
-      <exit box="1,4,12,4"/>
      </state_glyph>
     </state>
     <state name="pid_line_follow">
-     <entry brief="recalculate speeds">int16_t line_position = Q_PAR(me);
+     <entry brief="recalculate speeds">MY_DISABLE {
+    lcd.clear();
+    lcd.print(&quot;PID&quot;);
+}
 
-if (line_position &gt; 0) {
+unsigned int line_position = Q_PAR(me);
+MY_DISABLE {
+    lcd.clear();
+    lcd.print(line_position);
+}
+
+if (line_position &gt;= 0) {
+    // Calculate error
     int16_t error = line_position - 2000; /* 2000 is desired position */
 
-    int16_t speedDifference 
-        = ((float)error)                     * me-&gt;kp +
-          ((float)(error - me-&gt;last_error))  * me-&gt;kd +
-          ((float)(error + me-&gt;total_error)) * me-&gt;ki;
+    // Compute PID control
+    //int16_t speedDifference = error / 4;
+    int16_t speedDifference  = 
+              ((float)error)                     * me-&gt;kp
+            + ((float)(error - me-&gt;last_error))  * me-&gt;kd
+          // + ((float)(error + me-&gt;total_error)) * me-&gt;ki
+        ;
 
-    int16_t leftSpeed = (int16_t)me-&gt;turn_speed + speedDifference;
-    int16_t rightSpeed =(int16_t)me-&gt;turn_speed - speedDifference;
+    // Update state;
+    me-&gt;last_error = error;
+    me-&gt;total_error = me-&gt;total_error + error;
 
-    leftSpeed  = constrain(leftSpeed,  0, (int16_t)me-&gt;turn_speed);
-    rightSpeed = constrain(rightSpeed, 0, (int16_t)me-&gt;turn_speed);
+    // Calculate input with PID, within rated limits.
+    int16_t leftSpeed = me-&gt;turn_speed + speedDifference;
+    int16_t rightSpeed = me-&gt;turn_speed - speedDifference;
 
+    leftSpeed  = constrain(leftSpeed,  0, me-&gt;turn_speed);
+    rightSpeed = constrain(rightSpeed, 0, me-&gt;turn_speed);
+
+    // Send speed to motor
     motors.setSpeeds(leftSpeed, rightSpeed);
+
+    MY_DISABLE {
+        lcd.clear();
+        lcd.print(&quot;LS:&quot;);lcd.print(leftSpeed);
+        lcd.gotoXY(0,1);
+        lcd.print(&quot;RS:&quot;);lcd.print(rightSpeed);
+    }
 }</entry>
+     <exit brief="stop">motors.setSpeeds(0,0);</exit>
      <tran trig="LINE_POSITION_UPDATE" target="..">
+      <action>MY_ENABLE {
+    lcd.clear();
+    lcd.print(&quot;LPUPD EVENT&quot;);
+}</action>
       <tran_glyph conn="131,36,1,2,20,19,-37,-10">
        <action box="-10,15,20,2"/>
       </tran_glyph>
      </tran>
      <tran trig="BUTTON_PRESS" target="../../1">
       <tran_glyph conn="114,30,0,0,-26,-93,3">
-       <action box="-26,-3,16,2"/>
+       <action box="-21,-25,16,2"/>
       </tran_glyph>
      </tran>
      <state_glyph node="104,30,27,15">
       <entry box="1,2,21,2"/>
+      <exit box="1,4,6,2"/>
      </state_glyph>
     </state>
     <state_diagram size="176,70"/>
@@ -180,7 +274,7 @@ if (buttonA.getSingleDebouncedPress()) {
   </class>
   <class name="LineEvtSimulator" superclass="qpn::QActive">
    <documentation>Line Event Simulator</documentation>
-   <attribute name="period = 20" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="period = 3" type="const uint8_t" visibility="0x00" properties="0x00"/>
    <operation name="printToLCD" type="void" visibility="0x00" properties="0x00">
     <parameter name="lineSensorValues" type="uint16_t *"/>
     <code>// On the first line of the LCD, display the bar graph.
@@ -208,15 +302,19 @@ lcd.print(barChars[height]);</code>
      <tran trig="Q_TIMEOUT" target="..">
       <action brief="read sensors, publish location event">unsigned int line_sensor_values[5];
 
-// Expect calibration is done before we transition to this state.
-
-ALWAYS_PRINT {
+MY_DISABLE {
+    lineSensors.readCalibrated(line_sensor_values);
     lcd.clear();
     LineEvtSimulator_printToLCD(me, line_sensor_values);
 }
 
-unsigned int lineSensorValues[5]; // dummy, we won't use it.
-int position = lineSensors.readLine(lineSensorValues);
+unsigned int position = lineSensors.readLine(line_sensor_values);
+
+MY_DISABLE {
+    lcd.clear();//lcd.gotoXY(0,1);
+    lcd.print(position);
+}
+
 QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, LINE_POSITION_UPDATE_SIG, position);</action>
       <tran_glyph conn="35,29,1,1,41,9,-41">
        <action box="0,-2,40,2"/>
@@ -230,7 +328,7 @@ QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, LINE_POSITION_UPDATE_SIG, position);<
 // Setup LCD characters required for printing line values to LCD
 static const char levels[] PROGMEM = {
     0, 0, 0, 0, 0, 0, 0, 63, 63, 63, 63, 63, 63, 63
-  };
+};
 lcd.loadCustomCharacter(levels + 0, 0);  // 1 bar
 lcd.loadCustomCharacter(levels + 1, 1);  // 2 bars
 lcd.loadCustomCharacter(levels + 2, 2);  // 3 bars
@@ -264,8 +362,8 @@ lcd.loadCustomCharacter(levels + 6, 6);  // 7 bars</entry>
 static int DISABLE_PRINT = 0; // false
 
 #define PRINT_IF_ENABLED if (!DISABLE_PRINT)
-#define ALWAYS_PRINT if (1==1)
-#define DO_NOT_PRINT if (1==0)
+#define MY_ENABLE if (1==1)
+#define MY_DISABLE if (1==0)
 
 static int started = 0;
 
