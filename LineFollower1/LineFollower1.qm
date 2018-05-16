@@ -24,7 +24,14 @@ if (batt &gt; 6000) {
     me-&gt;turn_speed = 350;
 } else {
     me-&gt;turn_speed = 400;
-}</action>
+}
+servo0.attach(1);
+servo0.write(90);
+delay(500);
+servo0.write(180);
+delay(500);
+//servo0.detach();
+delay(100);</action>
      <initial_glyph conn="3,4,5,0,12,3">
       <action box="0,-2,10,2"/>
      </initial_glyph>
@@ -354,6 +361,7 @@ lcd.loadCustomCharacter(levels + 6, 6);  // 7 bars</entry>
   <file name="LineFollower1.ino">
    <text>#define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
 
+#include &lt;Servo.h&gt;
 #include &quot;qpn.h&quot;     // QP-nano framework
 #include &quot;Arduino.h&quot; // Arduino API
 
@@ -374,6 +382,8 @@ $declare(AOs::ButtonEvtSimulator)
 $declare(AOs::Sumo)
 
 //...
+
+Servo servo0;
 
 // AO instances and event queue buffers for them...
 Sumo AO_Sumo;

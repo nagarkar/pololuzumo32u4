@@ -18,6 +18,7 @@
 /*$endhead${.::LineFollower1.ino} ##########################################*/
 #define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
 
+#include <Servo.h>
 #include "qpn.h"     // QP-nano framework
 #include "Arduino.h" // Arduino API
 
@@ -40,7 +41,7 @@ typedef struct LineEvtSimulator {
     QActive super;
 
 /* public: */
-    const uint8_t period = 10;
+    const uint8_t period = 3;
 } LineEvtSimulator;
 
 /* public: */
@@ -78,9 +79,9 @@ typedef struct Sumo {
     const uint16_t ready_timeout_ms = 2000;
     const uint16_t calibration_timeout = 2000;
     bool debug_mode = true;
-    const float kp = 0.35;
+    const float kp = 0.25;
     const float ki = 0;
-    const float kd = 2;
+    const float kd = 6;
     int last_error = 0;
     long total_error = 0;
     const uint8_t calibration_cycle_time = 50;
@@ -96,6 +97,8 @@ static QState Sumo_pid_line_follow(Sumo * const me);
 /*$enddecl${AOs::Sumo} #####################################################*/
 
 //...
+
+Servo servo0;
 
 // AO instances and event queue buffers for them...
 Sumo AO_Sumo;
@@ -239,6 +242,13 @@ static QState Sumo_initial(Sumo * const me) {
     } else {
         me->turn_speed = 400;
     }
+    servo0.attach(1);
+    servo0.write(90);
+    delay(500);
+    servo0.write(180);
+    delay(500);
+    //servo0.detach();
+    delay(100);
     return Q_TRAN(&Sumo_paused);
 }
 /*${AOs::Sumo::SM::paused} .................................................*/
@@ -481,7 +491,7 @@ static QState Sumo_pid_line_follow(Sumo * const me) {
                 // Send speed to motor
                 motors.setSpeeds(leftSpeed, rightSpeed);
 
-                MY_ENABLE {
+                MY_DISABLE {
                     lcd.clear();
                     lcd.print("LS:");lcd.print(leftSpeed);
                     lcd.gotoXY(0,1);
