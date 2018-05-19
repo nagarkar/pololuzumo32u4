@@ -24,14 +24,7 @@ if (batt &gt; 6000) {
     me-&gt;turn_speed = 350;
 } else {
     me-&gt;turn_speed = 400;
-}
-servo0.attach(1);
-servo0.write(90);
-delay(500);
-servo0.write(180);
-delay(500);
-//servo0.detach();
-delay(100);</action>
+}</action>
      <initial_glyph conn="3,4,5,0,12,3">
       <action box="0,-2,10,2"/>
      </initial_glyph>
@@ -151,6 +144,10 @@ if(me-&gt;ready_time_remaining &lt;= 0){
       </tran_glyph>
      </tran>
      <tran trig="READY_TIMEOUT" target="../../4">
+      <action>MY_ENABLE {
+    lcd.clear();
+    lcd.print(&quot;WAIT&quot;);
+}</action>
       <tran_glyph conn="63,24,2,0,7">
        <action box="1,3,25,2"/>
       </tran_glyph>
@@ -161,19 +158,19 @@ if(me-&gt;ready_time_remaining &lt;= 0){
      </state_glyph>
     </state>
     <state name="waiting_and_refresh_pos">
-     <entry brief="stop motor">MY_ENABLE {
-    lcd.clear();
-    lcd.print(&quot;WAIT&quot;);
-}
-motors.setSpeeds(0,0);</entry>
+     <entry brief="stop motor">motors.setSpeeds(0,0);</entry>
      <tran trig="BUTTON_PRESS" target="../../5">
+      <action>MY_ENABLE {
+    lcd.clear();
+    lcd.print(&quot;PID&quot;);
+}</action>
       <tran_glyph conn="76,34,1,3,28">
        <action box="6,2,21,2"/>
       </tran_glyph>
      </tran>
      <tran trig="LINE_POSITION_UPDATE" target="..">
       <action brief="show pos">unsigned int line_position = Q_PAR(me);
-MY_DISABLE {
+MY_ENABLE {
     lcd.clear();
     lcd.print(line_position);
 }</action>
@@ -186,11 +183,7 @@ MY_DISABLE {
      </state_glyph>
     </state>
     <state name="pid_line_follow">
-     <entry brief="recalculate speeds">MY_DISABLE {
-    lcd.clear();
-    lcd.print(&quot;PID&quot;);
-}
-
+     <entry brief="recalculate speeds">
 unsigned int line_position = Q_PAR(me);
 MY_DISABLE {
     lcd.clear();
@@ -232,7 +225,7 @@ if (line_position &gt;= 0) {
 }</entry>
      <exit brief="stop">motors.setSpeeds(0,0);</exit>
      <tran trig="LINE_POSITION_UPDATE" target="..">
-      <action>MY_ENABLE {
+      <action>MY_DISABLE {
     lcd.clear();
     lcd.print(&quot;LPUPD EVENT&quot;);
 }</action>
@@ -268,7 +261,9 @@ if (line_position &gt;= 0) {
 //lcd.print(F(&quot;Timer&quot;));
 
 if (buttonA.getSingleDebouncedPress()) {
-    QACTIVE_POST_X((QActive *)&amp;AO_Sumo, 1, BUTTON_PRESS_SIG, 0);
+    lcd.clear();
+    lcd.print(F(&quot;button pressed&quot;));
+    QACTIVE_POST((QActive *)&amp;AO_Sumo, BUTTON_PRESS_SIG, 0);
 }</action>
       <tran_glyph conn="37,28,1,1,40,12,-40">
        <action box="0,-2,36,2"/>
@@ -281,7 +276,7 @@ if (buttonA.getSingleDebouncedPress()) {
   </class>
   <class name="LineEvtSimulator" superclass="qpn::QActive">
    <documentation>Line Event Simulator</documentation>
-   <attribute name="period = 3" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="period = 10" type="const uint8_t" visibility="0x00" properties="0x00"/>
    <operation name="printToLCD" type="void" visibility="0x00" properties="0x00">
     <parameter name="lineSensorValues" type="uint16_t *"/>
     <code>// On the first line of the LCD, display the bar graph.
@@ -361,7 +356,6 @@ lcd.loadCustomCharacter(levels + 6, 6);  // 7 bars</entry>
   <file name="LineFollower1.ino">
    <text>#define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
 
-#include &lt;Servo.h&gt;
 #include &quot;qpn.h&quot;     // QP-nano framework
 #include &quot;Arduino.h&quot; // Arduino API
 
@@ -383,7 +377,6 @@ $declare(AOs::Sumo)
 
 //...
 
-Servo servo0;
 
 // AO instances and event queue buffers for them...
 Sumo AO_Sumo;
@@ -398,9 +391,9 @@ Zumo32U4Motors motors;
 Zumo32U4LineSensors lineSensors;
 
 
-static QEvt l_SumoQSto[10]; // Event queue storage for Blinky
-static QEvt l_ButtonSimQSto[10];
-static QEvt l_LineSimQSto[10];
+static QEvt l_SumoQSto[100]; // Event queue storage for Blinky
+static QEvt l_ButtonSimQSto[100];
+static QEvt l_LineSimQSto[100];
 
 //...
 

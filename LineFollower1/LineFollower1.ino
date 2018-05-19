@@ -18,7 +18,6 @@
 /*$endhead${.::LineFollower1.ino} ##########################################*/
 #define Q_PARAM_SIZE 4 // 32 bit parameters (e.g. pointers) passed between events.
 
-#include <Servo.h>
 #include "qpn.h"     // QP-nano framework
 #include "Arduino.h" // Arduino API
 
@@ -41,7 +40,7 @@ typedef struct LineEvtSimulator {
     QActive super;
 
 /* public: */
-    const uint8_t period = 3;
+    const uint8_t period = 10;
 } LineEvtSimulator;
 
 /* public: */
@@ -98,7 +97,6 @@ static QState Sumo_pid_line_follow(Sumo * const me);
 
 //...
 
-Servo servo0;
 
 // AO instances and event queue buffers for them...
 Sumo AO_Sumo;
@@ -113,9 +111,9 @@ Zumo32U4Motors motors;
 Zumo32U4LineSensors lineSensors;
 
 
-static QEvt l_SumoQSto[10]; // Event queue storage for Blinky
-static QEvt l_ButtonSimQSto[10];
-static QEvt l_LineSimQSto[10];
+static QEvt l_SumoQSto[100]; // Event queue storage for Blinky
+static QEvt l_ButtonSimQSto[100];
+static QEvt l_LineSimQSto[100];
 
 //...
 
@@ -242,13 +240,6 @@ static QState Sumo_initial(Sumo * const me) {
     } else {
         me->turn_speed = 400;
     }
-    servo0.attach(1);
-    servo0.write(90);
-    delay(500);
-    servo0.write(180);
-    delay(500);
-    //servo0.detach();
-    delay(100);
     return Q_TRAN(&Sumo_paused);
 }
 /*${AOs::Sumo::SM::paused} .................................................*/
@@ -402,6 +393,10 @@ static QState Sumo_calibrating(Sumo * const me) {
         }
         /*${AOs::Sumo::SM::calibrating::READY_TIMEOUT} */
         case READY_TIMEOUT_SIG: {
+            MY_ENABLE {
+                lcd.clear();
+                lcd.print("WAIT");
+            }
             status_ = Q_TRAN(&Sumo_waiting_and_refresh_pos);
             break;
         }
@@ -418,23 +413,23 @@ static QState Sumo_waiting_and_refresh_pos(Sumo * const me) {
     switch (Q_SIG(me)) {
         /*${AOs::Sumo::SM::waiting_and_refresh_pos} */
         case Q_ENTRY_SIG: {
-            MY_ENABLE {
-                lcd.clear();
-                lcd.print("WAIT");
-            }
             motors.setSpeeds(0,0);
             status_ = Q_HANDLED();
             break;
         }
         /*${AOs::Sumo::SM::waiting_and_refr~::BUTTON_PRESS} */
         case BUTTON_PRESS_SIG: {
+            MY_ENABLE {
+                lcd.clear();
+                lcd.print("PID");
+            }
             status_ = Q_TRAN(&Sumo_pid_line_follow);
             break;
         }
         /*${AOs::Sumo::SM::waiting_and_refr~::LINE_POSITION_UPDATE} */
         case LINE_POSITION_UPDATE_SIG: {
             unsigned int line_position = Q_PAR(me);
-            MY_DISABLE {
+            MY_ENABLE {
                 lcd.clear();
                 lcd.print(line_position);
             }
@@ -454,10 +449,6 @@ static QState Sumo_pid_line_follow(Sumo * const me) {
     switch (Q_SIG(me)) {
         /*${AOs::Sumo::SM::pid_line_follow} */
         case Q_ENTRY_SIG: {
-            MY_DISABLE {
-                lcd.clear();
-                lcd.print("PID");
-            }
 
             unsigned int line_position = Q_PAR(me);
             MY_DISABLE {
@@ -509,7 +500,7 @@ static QState Sumo_pid_line_follow(Sumo * const me) {
         }
         /*${AOs::Sumo::SM::pid_line_follow::LINE_POSITION_UPDATE} */
         case LINE_POSITION_UPDATE_SIG: {
-            MY_ENABLE {
+            MY_DISABLE {
                 lcd.clear();
                 lcd.print("LPUPD EVENT");
             }
@@ -547,7 +538,9 @@ static QState ButtonEvtSimulator_running(ButtonEvtSimulator * const me) {
             //lcd.print(F("Timer"));
 
             if (buttonA.getSingleDebouncedPress()) {
-                QACTIVE_POST_X((QActive *)&AO_Sumo, 1, BUTTON_PRESS_SIG, 0);
+                lcd.clear();
+                lcd.print(F("button pressed"));
+                QACTIVE_POST((QActive *)&AO_Sumo, BUTTON_PRESS_SIG, 0);
             }
             status_ = Q_TRAN(&ButtonEvtSimulator_running);
             break;
