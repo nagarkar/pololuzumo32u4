@@ -9,8 +9,8 @@
    <attribute name="ready_timeout_ms = 2000" type="const uint16_t" visibility="0x00" properties="0x00"/>
    <attribute name="calibration_timeout = 2000" type="const uint16_t" visibility="0x00" properties="0x00"/>
    <attribute name="debug_mode = true" type="bool" visibility="0x00" properties="0x00"/>
-   <attribute name="kp = 0.25" type="const float" visibility="0x00" properties="0x00"/>
-   <attribute name="ki = 0" type="const float" visibility="0x00" properties="0x00"/>
+   <attribute name="kp = 0.7" type="const float" visibility="0x00" properties="0x00"/>
+   <attribute name="ki = 1" type="const float" visibility="0x00" properties="0x00"/>
    <attribute name="kd = 6" type="const float" visibility="0x00" properties="0x00"/>
    <attribute name="last_error = 0" type="int" visibility="0x00" properties="0x00"/>
    <attribute name="total_error = 0" type="long" visibility="0x00" properties="0x00"/>
@@ -276,7 +276,7 @@ if (buttonA.getSingleDebouncedPress()) {
   </class>
   <class name="LineEvtSimulator" superclass="qpn::QActive">
    <documentation>Line Event Simulator</documentation>
-   <attribute name="period = 10" type="const uint8_t" visibility="0x00" properties="0x00"/>
+   <attribute name="period = 5" type="const uint8_t" visibility="0x00" properties="0x00"/>
    <operation name="printToLCD" type="void" visibility="0x00" properties="0x00">
     <parameter name="lineSensorValues" type="uint16_t *"/>
     <code>// On the first line of the LCD, display the bar graph.

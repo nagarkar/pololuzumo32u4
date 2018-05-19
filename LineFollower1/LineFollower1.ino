@@ -40,7 +40,7 @@ typedef struct LineEvtSimulator {
     QActive super;
 
 /* public: */
-    const uint8_t period = 10;
+    const uint8_t period = 5;
 } LineEvtSimulator;
 
 /* public: */
@@ -78,8 +78,8 @@ typedef struct Sumo {
     const uint16_t ready_timeout_ms = 2000;
     const uint16_t calibration_timeout = 2000;
     bool debug_mode = true;
-    const float kp = 0.25;
-    const float ki = 0;
+    const float kp = 0.7;
+    const float ki = 1;
     const float kd = 6;
     int last_error = 0;
     long total_error = 0;
